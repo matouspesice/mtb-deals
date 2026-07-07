@@ -69,6 +69,21 @@ Výstupy: `data/report_women175.html`, `data/report_women175.txt`,
 `data/merged_deals_w175.json`. Parametry (zdvih, velikosti, cena) jsou na začátku
 `scripts/build_women175.py` (`TRAVEL_MIN/MAX`, `PRICE_EUR_MIN`, funkce `frame_fit_w175`).
 
+## Publikace (GitHub Pages)
+
+Veřejný web: **https://matouspesice.github.io/mtb-deals/** (rozcestník na oba reporty).
+
+Statický web se staví do `docs/` (rozcestník + oba reporty, obrázky se tahají z CDN,
+takže `data/` není potřeba). Po přegenerování reportů znovu spusť:
+
+```powershell
+python mtb/scripts/publish_site.py
+git add docs && git commit -m "update reports" && git push
+```
+
+Pages jsou nastavené na větev `main`, složku `/docs`. Raw data (`data/`,
+`offline-pages/`) jsou v `.gitignore` a do repa se nepushují.
+
 ## Výstupy
 
 | Soubor | Popis |
