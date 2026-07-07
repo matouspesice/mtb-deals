@@ -26,7 +26,6 @@ from filters import (
     MIN_YEAR,
     PRICE_EUR_MAX,
     czk_to_eur,
-    extract_travel_mm,
     is_full_suspension,
     is_vintage_or_wrong_category,
     model_year,
@@ -61,74 +60,123 @@ GENERIC_SOURCES = {
 }
 
 
+def extract_travel_w175(text: str) -> list[int]:
+    """Suspension travel in mm — reads 'Federweg', and 'Gabel/Dämpfer … mm' too."""
+    t = text.lower()
+    vals: list[int] = []
+    for m in re.finditer(
+        r"(?:federweg|federung|travel|zdvih)\s*(?:vorne|hinten|vorder|hinter|v\.|h\.)?\s*[:=]?\s*(\d{2,3})\s*mm?",
+        t,
+    ):
+        vals.append(int(m.group(1)))
+    for m in re.finditer(r"(\d{2,3})\s*mm\s*(?:federweg|travel|zdvih)", t):
+        vals.append(int(m.group(1)))
+    # fork/shock context followed by "NNN mm" within a short window
+    for m in re.finditer(
+        r"(?:federgabel|gabel|fork|vorne|vorder|d[äa]mpfer|daempfer|shock|hinten|heck)"
+        r"[^\n\r.|;]{0,40}?(\d{2,3})\s*mm",
+        t,
+    ):
+        vals.append(int(m.group(1)))
+    for m in re.finditer(r"(\d{2,3})\s*/\s*(\d{2,3})\s*mm", t):
+        vals.extend([int(m.group(1)), int(m.group(2))])
+    # plausible suspension travel only (excludes rotor 203, dropper aside)
+    return [v for v in vals if 90 <= v <= 220]
+
+
 def is_enduro_am_travel(text: str, travels: list[int]) -> tuple[bool, str]:
-    """Prefer ~140-180 mm; keyword/model fallback when travel not stated."""
+    """Prefer ~140-180 mm. If travel is stated but out of range → reject even if
+    the ad says 'enduro'. Keyword/model fallback only when travel is unknown."""
     if travels:
         ok = [x for x in travels if TRAVEL_MIN <= x <= TRAVEL_MAX]
         if ok:
             return True, f"{max(ok)}mm"
-        if all(x < TRAVEL_MIN for x in travels):
-            return False, f"too short ({max(travels)}mm)"
-        if all(x > TRAVEL_MAX for x in travels):
-            return False, f"too long ({min(travels)}mm)"
+        return False, f"travel {min(travels)}-{max(travels)}mm"
 
     t = text.lower()
-    if re.search(r"\b(80|90|100|110|120|130)\s*mm\b", t):
-        if not any(x in t for x in ("enduro", "all mountain", "all-mountain", "140", "150", "160", "170")):
-            return False, "XC/trail travel"
-
     kw = ["enduro", "all mountain", "all-mountain", "allmountain", "bikepark", "freeride"]
     models = [
         "capra", "jeffsy", "spectral", "stereo 150", "stereo 160", "sight", "altitude",
         "nomad", "bronson", "meta am", "meta tr", "slash", "strive", "torque",
         "one-sixty", "one sixty", "propain tyee", "rallon", "ripmo", "sb150", "sb160",
-        "megatower", "hightower", "firebird", "sam", "reign", "enduro ", "spindrift",
-        "occam", "rise", "rocky mountain instinct", "instinct", "trance x",
+        "megatower", "hightower", "firebird", "spindrift",
+        "occam", "trance x",
     ]
     if any(k in t for k in kw) or any(m in t for m in models):
         return True, "enduro/AM"
     return False, "travel unknown"
 
 
-def frame_fit_w175(text: str) -> tuple[str, str]:
-    """Fit for ~175 cm (or a bit less) → S/M. L and XL are too big, XS too small."""
-    t = text.lower()
+# Frame-size label words (singular, word-boundaried so plural size charts like
+# "FRAME SIZES XS S M L XL" don't leak every size).
+_SIZE_LABEL = (
+    r"(?:rahmengr[öo]ße|rahmengroesse|rahmenh[öo]he|gr[öo]ße|groesse|gr\.|"
+    r"\bsize\b|\bvelikost\b|\bvel\.|\brh\b|\brám\b|\brahmen\b)"
+)
 
-    too_big = re.search(
-        r"gr(?:öße|oesse|\.)?\s*xl|size\s*xl|velikost\s*xl|ram\s*xl|\bxl\b"
-        r"|\b2[0-2]\s*[\"'zZ]|\b5[0-9]\s*cm|\b6[0-9]\s*cm|\bs5\b",
-        t,
-    )
-    if too_big and not re.search(r"gr(?:öße|oesse|\.)?\s*[sm]\b|size\s*[sm]\b|velikost\s*[sm]\b", t):
-        return "unlikely", "XL"
 
-    is_large = re.search(
-        r"gr(?:öße|oesse|\.)?\s*l\b|size\s*l\b|velikost\s*l\b|gr\.?\s*l\b"
-        r"|[-_/]gr[-_]?l[a-z0-9]*|\b19[,.]?5?\s*[\"'zZ]|\b48\s*cm|\b50\s*cm|\bs4\b",
-        t,
-    )
-    if is_large and not re.search(r"gr(?:öße|oesse|\.)?\s*[sm]\b|size\s*[sm]\b|velikost\s*[sm]\b", t):
-        return "unlikely", "L (too big)"
+def _size_from_cm(cm: int) -> str:
+    if cm <= 37:
+        return "xs"
+    if cm <= 43:
+        return "s"
+    if cm <= 46:
+        return "m"
+    if cm <= 50:
+        return "l"
+    return "xl"
 
-    too_small = re.search(
-        r"gr(?:öße|oesse|\.)?\s*xs|size\s*xs|velikost\s*xs|\b1[34]\s*[\"'zZ]|\b3[0-8]\s*cm|\bs1\b",
-        t,
-    )
-    if too_small and not re.search(r"gr(?:öße|oesse|\.)?\s*[sm]\b|size\s*[sm]\b|velikost\s*[sm]\b", t):
+
+def _size_from_inch(inch: int) -> str:
+    if inch <= 14:
+        return "xs"
+    if inch <= 16:
+        return "s"
+    if inch <= 18:
+        return "m"
+    if inch <= 20:
+        return "l"
+    return "xl"
+
+
+def _size_letters(s: str) -> set[str]:
+    s = s.lower()
+    out: set[str] = set()
+    for m in re.finditer(_SIZE_LABEL + r"\s*[:=\-]?\s*(xxl|xl|xs|s|m|l)\b", s):
+        out.add(m.group(1))
+    for m in re.finditer(r"[-_/]gr[-_]?(xs|s|m|l|xl)\b", s):
+        out.add(m.group(1))
+    for m in re.finditer(r"\bs([1-5])\b", s):
+        out.add({"1": "xs", "2": "s", "3": "m", "4": "l", "5": "xl"}[m.group(1)])
+    for m in re.finditer(_SIZE_LABEL + r"\s*[:=\-]?\s*(\d{2})\s*cm", s):
+        out.add(_size_from_cm(int(m.group(1))))
+    for m in re.finditer(r"\b(1[4-9]|2[0-2])(?:[.,]5)?\s*(?:zoll|\"|'')", s):
+        out.add(_size_from_inch(int(m.group(1))))
+    return {"xl" if x == "xxl" else x for x in out}
+
+
+def frame_fit_w175(text: str, title: str = "") -> tuple[str, str]:
+    """Fit for ~175 cm (or a bit less) → S/M. L/XL too big, XS too small.
+
+    Presence of a confirmed S/M wins; otherwise a confirmed L/XL rejects. A bare
+    size letter at the end of the title (e.g. "... 8.0 L") is also honoured.
+    """
+    letters = _size_letters(text)
+
+    tl = title.lower().strip()
+    mt = re.search(r"(?:^|[\s\-/(])(xxl|xl|xs|[sml])\)?\s*$", tl)
+    if mt:
+        letters.add("xl" if mt.group(1) == "xxl" else mt.group(1))
+
+    good = letters & {"s", "m"}
+    big = letters & {"l", "xl"}
+
+    if good:
+        return "likely_fit", "M" if "m" in good else "S"
+    if big:
+        return "unlikely", "XL" if "xl" in big else "L (too big)"
+    if "xs" in letters:
         return "unlikely", "XS (too small)"
-
-    if re.search(
-        r"gr(?:öße|oesse|\.)?\s*m\b|size\s*m\b|velikost\s*m\b|gr\.?\s*m\b"
-        r"|[-_/]gr[-_]?m[a-z0-9]*|\b1[78]\s*[\"'zZ]|\b4[46]\s*cm|\bs3\b",
-        t,
-    ):
-        return "likely_fit", "M"
-    if re.search(
-        r"gr(?:öße|oesse|\.)?\s*s\b|size\s*s\b|velikost\s*s\b|gr\.?\s*s\b"
-        r"|[-_/]gr[-_]?s[a-z0-9]*|\b1[56]\s*[\"'zZ]|\b4[02]\s*cm|\bs2\b",
-        t,
-    ):
-        return "likely_fit", "S"
     return "unknown", "?"
 
 
@@ -193,14 +241,14 @@ def score_w175(text: str, price_eur: float | None, year: int | None, fit_class: 
     return score, notes
 
 
-def evaluate(text: str, price_eur: float | None) -> dict | None:
+def evaluate(text: str, price_eur: float | None, title: str = "") -> dict | None:
     bad, _ = is_vintage_or_wrong_category(text)
     if bad:
         return None
     if not is_full_suspension(text):
         return None
 
-    travels = extract_travel_mm(text)
+    travels = extract_travel_w175(text)
     ok_travel, travel_note = is_enduro_am_travel(text, travels)
     if not ok_travel:
         return None
@@ -214,7 +262,7 @@ def evaluate(text: str, price_eur: float | None) -> dict | None:
     if year is None and re.search(r"\b(201[0-8])\b", text):
         return None
 
-    fit_class, fit_label = frame_fit_w175(text)
+    fit_class, fit_label = frame_fit_w175(text, title)
     if fit_class == "unlikely":
         return None
 
@@ -242,7 +290,7 @@ def from_generic(source: str, path: Path) -> list[dict]:
         price = item.get("price_eur")
         if price is None and item.get("price_czk"):
             price = czk_to_eur(item["price_czk"])
-        meta = evaluate(text, price)
+        meta = evaluate(text, price, item.get("title", ""))
         if not meta:
             continue
         out.append({
@@ -267,10 +315,10 @@ def from_willhaben() -> list[dict]:
     for item in json.load(open(p, encoding="utf-8")):
         text = full_text(item)
         price = wh_price_eur(item)
-        meta = evaluate(text, price)
+        a = attr_map(item.get("attributes", {}))
+        meta = evaluate(text, price, a.get("HEADING", item.get("description", "")))
         if not meta:
             continue
-        a = attr_map(item.get("attributes", {}))
         out.append({
             "source": "willhaben.at",
             "id": item.get("id"),
