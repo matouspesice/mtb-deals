@@ -1,0 +1,11 @@
+# Raw scraped data & generated reports (large, regenerable)
+data/
+offline-pages/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
