@@ -52,7 +52,7 @@ python mtb/scripts/merge_all.py
 Pro nižší jezdkyni (~175 cm, klidně o něco méně) — enduro/all-mountain kolem
 **150–170 mm** zdvihu (flow traily, bikeparky, ale ať se dá vyjet i nahoru).
 Používá **stejná stažená data**, jen jiný filtr velikosti rámu (**S/M** místo M/L),
-širší pásmo zdvihu (140–180 mm) a nižší spodní cenu **€700**. Report je samostatný,
+širší pásmo zdvihu (140–180 mm) a nižší spodní cenu **€600**. Report je samostatný,
 ten pro 183 cm nepřepisuje.
 
 ```powershell
@@ -61,9 +61,11 @@ start mtb/data/report_women175.html
 ```
 
 **Kontrola odkazů:** skript po analýze u každého inzerátu ověří, že je stále
-aktivní, a **mrtvé/prodané smaže** (willhaben u smazaných vrací HTTP 200, ale
-podstrčí kategorii — pozná se podle titulku, ne podle stavového kódu). Ověření
-přeskočíš přepínačem `--no-verify`. Logika je v `scripts/linkcheck.py`.
+aktivní, a **mrtvé/prodané smaže**. Willhaben u smazaných vrací HTTP 200 a
+podstrčí stránku kategorie (pozná se podle titulku), u **prodaných/rezervovaných**
+nechá vlastní stránku, ale ve vloženém JSON má `advertStatus:sold` /
+`availability:SoldOut` / `(verkauft)` — to se hlídá taky. Ověření přeskočíš
+přepínačem `--no-verify`. Logika je v `scripts/linkcheck.py`.
 
 Výstupy: `data/report_women175.html`, `data/report_women175.txt`,
 `data/merged_deals_w175.json`. Parametry (zdvih, velikosti, cena) jsou na začátku

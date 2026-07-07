@@ -26,6 +26,7 @@ REPORTS = [
         "title": "Trail / All-Mountain — ~183 cm",
         "fit": "velikost M / L",
         "travel": "~130–170 mm",
+        "price": "€800–1900",
         "desc": "Celoodpružená trail/AM kola pro vyššího jezdce (~183 cm).",
     },
     {
@@ -35,6 +36,7 @@ REPORTS = [
         "title": "Enduro / All-Mountain — ~175 cm",
         "fit": "velikost S / M",
         "travel": "~140–180 mm",
+        "price": "€600–1900",
         "desc": "Enduro/AM kola pro nižší jezdkyni (~175 cm, klidně o něco méně) — flow traily, bikeparky, ale vyjede i nahoru.",
     },
 ]
@@ -51,7 +53,7 @@ def _card(r: dict) -> str:
     n = _count(r["merged"])
     return f"""    <a class="card" href="{r['out']}">
       <h2>{r['title']}</h2>
-      <p class="tags"><span>{r['fit']}</span><span>{r['travel']}</span><span>€700–1900</span></p>
+      <p class="tags"><span>{r['fit']}</span><span>{r['travel']}</span><span>{r['price']}</span></p>
       <p class="desc">{r['desc']}</p>
       <p class="count">{n} aktivních inzerátů →</p>
     </a>"""
