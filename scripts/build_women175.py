@@ -44,7 +44,7 @@ TRAVEL_MIN = 140
 TRAVEL_MAX = 180
 
 # This profile starts a bit cheaper than the 183 cm search.
-PRICE_EUR_MIN = 700
+PRICE_EUR_MIN = 600
 
 AT_SOURCES = {"willhaben.at", "radbazar.at", "radlmarkt.at", "biklo.at"}
 CZ_SOURCES = {"bazos.cz", "sbazar.cz", "cyklobazar.cz", "biklo.cz"}

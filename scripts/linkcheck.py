@@ -20,7 +20,24 @@ DEAD_MARKERS = (
     "nicht mehr verf", "wurde nicht gefunden", "objekt wurde nicht",
     "anzeige wurde deaktiviert", "existiert nicht", "wurde beendet",
     "inzerát nebyl nalezen", "nabídka byla smazána", "inzerát byl smazán",
-    "stránka nenalezena", "404",
+    "stránka nenalezena", "404", "prodáno", "prodano", "rezervováno", "rezervovano",
+)
+
+
+# willhaben marks the status deep in the embedded __NEXT_DATA__ JSON, well past
+# the first 60 kB, so we read enough of the page to reach it.
+READ_BYTES = 400_000
+
+# Sold / reserved signals from willhaben's embedded ad JSON + rendered header.
+WH_SOLD_MARKERS = (
+    '"availability":"soldout"',
+    '"advertstatus":{"id":"sold"',
+    '"id":"sold","description":"verkauft"',
+    '"deletereason":"sold',
+    "adstatus=120",
+    "(verkauft)",
+    '"advertstatus":{"id":"reserved"',
+    "(reserviert)",
 )
 
 
@@ -28,7 +45,7 @@ def _fetch(url: str) -> tuple[int, str, str]:
     req = Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
     try:
         with urlopen(req, timeout=15) as r:
-            body = r.read(60000).decode("utf-8", "ignore").lower()
+            body = r.read(READ_BYTES).decode("utf-8", "ignore").lower()
             return r.status, r.geturl(), body
     except Exception as e:  # noqa: BLE001
         return int(getattr(e, "code", 0) or -1), url, ""
@@ -51,6 +68,9 @@ def is_live(url: str) -> bool:
         # Gone ads serve the category page (title "Mountainbikes - Fahrräder ...")
         # at the same URL, so the title is the reliable signal.
         if any(k in title for k in CATEGORY_TITLES):
+            return False
+        # Sold/reserved ads keep their own page; status lives in the embedded JSON.
+        if any(s in body for s in WH_SOLD_MARKERS):
             return False
         m = re.search(r"-(\d{6,})/?$", url) or re.search(r"/(\d{6,})/?$", url)
         ad_id = m.group(1) if m else None
